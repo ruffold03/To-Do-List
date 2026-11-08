@@ -156,6 +156,12 @@
   let filter = "all";
   let statsRange = "week";
   let dragState = null;
+  let dragGhost = null;
+  let dragOrigin = null;
+  let isDropping = false;
+
+  const flipTokens = new WeakMap();
+  const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   /* ============================================================
      Хранилище и миграция данных
@@ -459,14 +465,12 @@
      ============================================================ */
 
   function setupDrag(node, id) {
-    const handle = node.querySelector(".task__handle");
-
     // Начинаем перетаскивание:
-    // — мышью — с любого места карточки (кроме чекбокса, текста в режиме
+    // — мышью — с любого места карточки (кроме чекбокса, режима
     //   редактирования и кнопки удаления);
     // — touch/pen — только за ручку, чтобы не мешать прокрутке страницы.
     node.addEventListener("pointerdown", (event) => {
-      if (dragState) return;
+      if (dragState || isDropping) return;
       if (event.pointerType === "mouse" && event.button !== 0) return;
       if (list.children.length < 2) return;
       if (node.classList.contains("is-editing")) return;
@@ -487,6 +491,9 @@
         event.preventDefault();
       }
 
+      // Страховка от прерванного предыдущего перетаскивания
+      clearDragVisual();
+
       dragState = {
         id,
         node,
@@ -501,24 +508,6 @@
       window.addEventListener("pointercancel", onPointerUp);
       window.addEventListener("blur", cleanupDrag);
     });
-
-    function cleanupDrag() {
-      if (!dragState || dragState.id !== id) return false;
-
-      const wasStarted = dragState.started;
-      node.classList.remove("is-dragging");
-      list.classList.remove("is-dragging");
-      document.body.classList.remove("is-dragging");
-      dragState = null;
-
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
-      window.removeEventListener("blur", cleanupDrag);
-
-      if (wasStarted) persistOrderFromDom();
-      return true;
-    }
 
     function onPointerMove(event) {
       if (
@@ -537,8 +526,7 @@
         if (Math.hypot(dx, dy) < 5) return;
 
         dragState.started = true;
-        node.classList.add("is-dragging");
-        list.classList.add("is-dragging");
+        startDragVisual(dragState.startX, dragState.startY, node);
         document.body.classList.add("is-dragging");
 
         const selection = window.getSelection();
@@ -547,11 +535,23 @@
 
       if (event.cancelable) event.preventDefault();
 
+      updateDragVisual(event);
+
       const after = getDragAfterElement(list, event.clientY);
+      let needsMove = false;
+
       if (after == null) {
-        if (list.lastElementChild !== node) list.appendChild(node);
+        needsMove = list.lastElementChild !== node;
       } else if (after !== node) {
-        list.insertBefore(node, after);
+        needsMove = node.nextElementSibling !== after;
+      }
+
+      if (needsMove) {
+        // Соседние карточки плавно раздвигаются (FLIP)
+        animateReorder(node, () => {
+          if (after == null) list.appendChild(node);
+          else list.insertBefore(node, after);
+        });
       }
     }
 
@@ -566,11 +566,187 @@
 
       cleanupDrag();
     }
+
+    function cleanupDrag() {
+      if (!dragState || dragState.id !== id) return false;
+
+      const wasStarted = dragState.started;
+      const ghost = dragGhost;
+
+      document.body.classList.remove("is-dragging");
+      dragState = null;
+
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("blur", cleanupDrag);
+
+      if (!wasStarted) {
+        clearDragVisual();
+        return true;
+      }
+
+      persistOrderFromDom();
+
+      // Без анимации (reduced motion) просто возвращаем карточку на место
+      if (!ghost || reducedMotionQuery.matches) {
+        node.classList.remove("is-dragging");
+        clearDragVisual();
+        return true;
+      }
+
+      // Плавно «ставим» поднятую карточку в её новый слот
+      isDropping = true;
+      const target = node.getBoundingClientRect();
+      const origin = dragOrigin;
+      const finalX = origin ? target.left - origin.rect.left : 0;
+      const finalY = origin ? target.top - origin.rect.top : 0;
+
+      const animation = ghost.animate(
+        [
+          { transform: ghost.style.transform },
+          {
+            transform: `translate3d(${finalX}px, ${finalY}px, 0) rotate(0deg) scale(1)`,
+          },
+        ],
+        { duration: 170, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+      );
+
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        ghost.remove();
+        node.classList.remove("is-placeholder");
+        dragGhost = null;
+        dragOrigin = null;
+        isDropping = false;
+      };
+
+      animation.finished.then(finish).catch(finish);
+      window.setTimeout(finish, 260);
+
+      return true;
+    }
+  }
+
+  /* ---------- Визуальная часть drag & drop ---------- */
+
+  function startDragVisual(startX, startY, node) {
+    const rect = node.getBoundingClientRect();
+    dragOrigin = { x: startX, y: startY, rect };
+
+    // Карточка уже на экране — анимация появления после приземления не нужна
+    node.style.animation = "none";
+
+    if (reducedMotionQuery.matches) {
+      node.classList.add("is-dragging");
+      return;
+    }
+
+    // На месте карточки остаётся пунктирный слот
+    node.classList.add("is-placeholder");
+
+    // «Поднятая» копия карточки, которая следует за курсором
+    const ghost = node.cloneNode(true);
+    ghost.classList.remove("is-placeholder", "is-dragging", "is-editing");
+    ghost.classList.add("task--ghost");
+    ghost.setAttribute("aria-hidden", "true");
+
+    ghost.querySelectorAll("button, input, [tabindex]").forEach((element) => {
+      element.tabIndex = -1;
+    });
+
+    const sourceCheckbox = node.querySelector(".task__checkbox");
+    const ghostCheckbox = ghost.querySelector(".task__checkbox");
+    if (sourceCheckbox && ghostCheckbox) {
+      ghostCheckbox.checked = sourceCheckbox.checked;
+    }
+
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.height = `${rect.height}px`;
+    ghost.style.left = `${rect.left}px`;
+    ghost.style.top = `${rect.top}px`;
+    ghost.style.transform = "translate3d(0, 0, 0) rotate(0deg) scale(1.02)";
+
+    document.body.append(ghost);
+    dragGhost = ghost;
+  }
+
+  function updateDragVisual(event) {
+    if (!dragGhost || !dragOrigin) return;
+
+    const dx = event.clientX - dragOrigin.x;
+    const dy = event.clientY - dragOrigin.y;
+    const rotate = Math.max(-3, Math.min(3, dx * 0.03));
+
+    dragGhost.style.transform = `translate3d(${dx}px, ${dy}px, 0) rotate(${rotate}deg) scale(1.02)`;
+  }
+
+  function clearDragVisual() {
+    if (dragGhost) {
+      dragGhost.remove();
+      dragGhost = null;
+    }
+
+    dragOrigin = null;
+
+    document.querySelectorAll(".task.is-placeholder").forEach((element) => {
+      element.classList.remove("is-placeholder");
+    });
+  }
+
+  // FLIP-анимация: соседние карточки плавно уступают место
+  function animateReorder(draggedNode, mutate) {
+    if (reducedMotionQuery.matches) {
+      mutate();
+      return;
+    }
+
+    const siblings = Array.from(list.querySelectorAll(".task")).filter(
+      (element) => element !== draggedNode
+    );
+    const before = new Map();
+
+    siblings.forEach((element) => {
+      before.set(element, element.getBoundingClientRect());
+    });
+
+    mutate();
+
+    siblings.forEach((element) => {
+      const previous = before.get(element);
+      const current = element.getBoundingClientRect();
+      const deltaY = previous.top - current.top;
+
+      if (Math.abs(deltaY) < 1) return;
+
+      const token = (flipTokens.get(element) || 0) + 1;
+      flipTokens.set(element, token);
+
+      element.style.transition = "none";
+      element.style.transform = `translateY(${deltaY}px)`;
+      void element.offsetHeight;
+      element.style.transition = "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)";
+      element.style.transform = "";
+
+      const cleanup = () => {
+        element.removeEventListener("transitionend", cleanup);
+        if (flipTokens.get(element) !== token) return;
+        element.style.transition = "";
+        element.style.transform = "";
+      };
+
+      element.addEventListener("transitionend", cleanup, { once: true });
+      window.setTimeout(cleanup, 240);
+    });
   }
 
   // Возвращает элемент, перед которым нужно вставить перетаскиваемый
   function getDragAfterElement(container, pointerY) {
-    const elements = Array.from(container.querySelectorAll(".task:not(.is-dragging)"));
+    const elements = Array.from(
+      container.querySelectorAll(".task:not(.is-dragging):not(.is-placeholder)")
+    );
 
     return elements.reduce(
       (closest, child) => {

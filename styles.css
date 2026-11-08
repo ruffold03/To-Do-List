@@ -391,12 +391,6 @@ button {
   list-style: none;
 }
 
-.task-list.is-dragging {
-  border-radius: var(--radius-lg);
-  outline: 1px dashed rgba(200, 98, 45, 0.4);
-  outline-offset: 4px;
-}
-
 .task {
   display: flex;
   align-items: center;
@@ -440,6 +434,47 @@ button {
   opacity: 0;
   transform: translateX(10px);
   animation: none;
+}
+
+/* Слот, который остаётся на месте «поднятой» карточки */
+.task.is-placeholder {
+  border: 1px dashed rgba(200, 98, 45, 0.5);
+  background: var(--accent-faint);
+  box-shadow: none;
+  transform: none;
+  opacity: 1;
+  animation: none;
+  cursor: grabbing;
+}
+
+.task.is-placeholder > * {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* «Поднятая» копия карточки, которая следует за курсором */
+.task--ghost {
+  position: fixed;
+  z-index: 60;
+  margin: 0;
+  pointer-events: none;
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 22px 44px -16px rgba(33, 31, 27, 0.28), 0 4px 12px -6px rgba(33, 31, 27, 0.18);
+  transform-origin: center center;
+  will-change: transform;
+  animation: none;
+  cursor: grabbing;
+  user-select: none;
+}
+
+.task--ghost .task__handle {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.task--ghost .task__delete {
+  opacity: 0;
 }
 
 .task__handle {
