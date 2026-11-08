@@ -461,46 +461,49 @@
   function setupDrag(node, id) {
     const handle = node.querySelector(".task__handle");
 
-    handle.addEventListener("pointerdown", (event) => {
+    // Начинаем перетаскивание:
+    // — мышью — с любого места карточки (кроме чекбокса, текста в режиме
+    //   редактирования и кнопки удаления);
+    // — touch/pen — только за ручку, чтобы не мешать прокрутке страницы.
+    node.addEventListener("pointerdown", (event) => {
+      if (dragState) return;
       if (event.pointerType === "mouse" && event.button !== 0) return;
       if (list.children.length < 2) return;
+      if (node.classList.contains("is-editing")) return;
 
-      event.preventDefault();
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const isHandle = Boolean(target.closest(".task__handle"));
+      const isControl = Boolean(
+        target.closest(".task__check, .task__delete, .task__edit, input, textarea, select")
+      );
+
+      if (isControl) return;
+      if (event.pointerType !== "mouse" && !isHandle) return;
+
+      if (isHandle) {
+        // Ручка не должна выделять текст или запускать прокрутку
+        event.preventDefault();
+      }
+
       dragState = {
         id,
         node,
+        pointerId: event.pointerId,
+        startX: event.clientX,
         startY: event.clientY,
         started: false,
       };
 
-      try {
-        handle.setPointerCapture(event.pointerId);
-      } catch (error) {
-        // Синтетические события могут не поддерживать capture — не критично
-      }
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+      window.addEventListener("blur", cleanupDrag);
     });
 
-    handle.addEventListener("pointermove", (event) => {
-      if (!dragState || dragState.id !== id) return;
-
-      if (!dragState.started) {
-        if (Math.abs(event.clientY - dragState.startY) < 4) return;
-        dragState.started = true;
-        node.classList.add("is-dragging");
-        list.classList.add("is-dragging");
-        document.body.classList.add("is-dragging");
-      }
-
-      const after = getDragAfterElement(list, event.clientY);
-      if (after == null) {
-        if (list.lastElementChild !== node) list.appendChild(node);
-      } else if (after !== node) {
-        list.insertBefore(node, after);
-      }
-    });
-
-    const endDrag = () => {
-      if (!dragState || dragState.id !== id) return;
+    function cleanupDrag() {
+      if (!dragState || dragState.id !== id) return false;
 
       const wasStarted = dragState.started;
       node.classList.remove("is-dragging");
@@ -508,12 +511,61 @@
       document.body.classList.remove("is-dragging");
       dragState = null;
 
-      if (wasStarted) persistOrderFromDom();
-    };
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("blur", cleanupDrag);
 
-    handle.addEventListener("pointerup", endDrag);
-    handle.addEventListener("pointercancel", endDrag);
-    handle.addEventListener("lostpointercapture", endDrag);
+      if (wasStarted) persistOrderFromDom();
+      return true;
+    }
+
+    function onPointerMove(event) {
+      if (
+        !dragState ||
+        dragState.id !== id ||
+        event.pointerId !== dragState.pointerId
+      ) {
+        return;
+      }
+
+      if (!dragState.started) {
+        const dx = event.clientX - dragState.startX;
+        const dy = event.clientY - dragState.startY;
+
+        // Небольшой порог, чтобы обычный клик и двойной клик не превращались в drag
+        if (Math.hypot(dx, dy) < 5) return;
+
+        dragState.started = true;
+        node.classList.add("is-dragging");
+        list.classList.add("is-dragging");
+        document.body.classList.add("is-dragging");
+
+        const selection = window.getSelection();
+        if (selection) selection.removeAllRanges();
+      }
+
+      if (event.cancelable) event.preventDefault();
+
+      const after = getDragAfterElement(list, event.clientY);
+      if (after == null) {
+        if (list.lastElementChild !== node) list.appendChild(node);
+      } else if (after !== node) {
+        list.insertBefore(node, after);
+      }
+    }
+
+    function onPointerUp(event) {
+      if (
+        !dragState ||
+        dragState.id !== id ||
+        event.pointerId !== dragState.pointerId
+      ) {
+        return;
+      }
+
+      cleanupDrag();
+    }
   }
 
   // Возвращает элемент, перед которым нужно вставить перетаскиваемый
@@ -592,9 +644,6 @@
       let label = `${capitalize(WEEKDAYS_FULL[(parseDateKey(key).getDay() + 6) % 7])}, ${formatDayTitle(key)}`;
       if (dayTasks.length > 0) {
         button.classList.add("has-tasks");
-        if (done === dayTasks.length) button.classList.add("is-complete");
-        else if (done > 0) button.classList.add("is-partial");
-        else button.classList.add("is-open");
 
         const dot = document.createElement("span");
         dot.className = "calendar__dot";
