@@ -3,82 +3,209 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Простой и удобный список задач с сохранением в браузере.">
-  <title>Список задач</title>
+  <meta name="description" content="Минималистичный планер: задачи по дням, календарь, прогресс и статистика.">
+  <meta name="theme-color" content="#FAFAF8">
+  <title>Планёрка — список задач</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23C8622D'/><path d='M28 52l15 15 30-32' fill='none' stroke='white' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 </head>
 <body>
-  <main class="app">
-    <header class="app__header">
-      <div class="app__title-row">
-        <div class="app__logo" aria-hidden="true">✓</div>
-        <div>
-          <h1 class="app__title">Список задач</h1>
-          <p class="app__subtitle" id="subtitle">Всё под контролем</p>
-        </div>
-      </div>
-      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Переключить тему" title="Переключить тему">
-        <span class="theme-toggle__icon" aria-hidden="true">🌙</span>
-      </button>
-    </header>
-
-    <form class="add-form" id="addForm" autocomplete="off">
-      <label class="visually-hidden" for="taskInput">Новая задача</label>
-      <input
-        class="add-form__input"
-        id="taskInput"
-        type="text"
-        name="task"
-        placeholder="Что нужно сделать?"
-        maxlength="200"
-        required
-      >
-      <button class="add-form__button" type="submit">
-        <span aria-hidden="true">+</span>
-        <span class="add-form__button-text">Добавить</span>
-      </button>
-    </form>
-
-    <div class="toolbar">
-      <div class="filters" role="group" aria-label="Фильтр задач">
-        <button class="filters__button is-active" type="button" data-filter="all">Все</button>
-        <button class="filters__button" type="button" data-filter="active">Активные</button>
-        <button class="filters__button" type="button" data-filter="completed">Выполненные</button>
-      </div>
-      <button class="toolbar__clear" id="clearCompleted" type="button">Очистить выполненные</button>
-    </div>
-
-    <ul class="task-list" id="taskList" aria-live="polite"></ul>
-
-    <div class="empty-state" id="emptyState" hidden>
-      <div class="empty-state__icon" aria-hidden="true">🗒️</div>
-      <p class="empty-state__title" id="emptyTitle">Пока пусто</p>
-      <p class="empty-state__text" id="emptyText">Добавьте первую задачу — и она появится здесь.</p>
-    </div>
-
-    <footer class="app__footer">
-      <span id="counter">0 задач</span>
-      <span class="app__hint">Данные сохраняются в вашем браузере</span>
-    </footer>
-  </main>
-
-  <template id="taskTemplate">
-    <li class="task">
-      <label class="task__check">
-        <input class="task__checkbox" type="checkbox">
-        <span class="task__box" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 12.5l4.5 4.5L19 7.5"></path>
           </svg>
         </span>
-        <span class="task__text"></span>
+        <span class="brand__name">Планёрка</span>
+      </div>
+
+      <nav class="view-tabs" aria-label="Разделы">
+        <button class="view-tabs__btn is-active" type="button" data-view="tasks" aria-pressed="true">Задачи</button>
+        <button class="view-tabs__btn" type="button" data-view="stats" aria-pressed="false">Статистика</button>
+      </nav>
+
+      <p class="topbar__date" id="todayLabel"></p>
+    </header>
+
+    <main class="main">
+      <!-- ===== Экран задач ===== -->
+      <div class="layout" id="tasksView">
+        <section class="panel tasks-panel" aria-labelledby="dayTitle">
+          <header class="day-head">
+            <div>
+              <p class="eyebrow" id="dayEyebrow">Сегодня</p>
+              <h1 class="day-head__title" id="dayTitle">8 ноября</h1>
+            </div>
+            <p class="day-head__count" id="dayCount">Нет задач</p>
+          </header>
+
+          <form class="add-form" id="addForm" autocomplete="off">
+            <div class="add-form__field">
+              <label class="visually-hidden" for="taskInput">Новая задача</label>
+              <input
+                class="add-form__input"
+                id="taskInput"
+                name="task"
+                type="text"
+                placeholder="Что нужно сделать?"
+                maxlength="200"
+                required
+              >
+            </div>
+            <div class="add-form__date">
+              <label class="visually-hidden" for="taskDate">Дата задачи</label>
+              <input class="add-form__date-input" id="taskDate" name="date" type="date">
+            </div>
+            <button class="add-form__submit" type="submit">Добавить</button>
+          </form>
+
+          <div class="progress">
+            <div class="progress__head">
+              <span class="progress__label" id="progressLabel" aria-live="polite">0 из 0 выполнено</span>
+              <span class="progress__percent" id="progressPercent">0%</span>
+            </div>
+            <div
+              class="progress__track"
+              id="progressTrack"
+              role="progressbar"
+              aria-label="Прогресс выполнения задач за день"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <div class="progress__bar" id="progressBar"></div>
+            </div>
+          </div>
+
+          <div class="list-toolbar">
+            <div class="filters" role="group" aria-label="Фильтр задач за день">
+              <button class="filters__btn is-active" type="button" data-filter="all" aria-pressed="true">Все</button>
+              <button class="filters__btn" type="button" data-filter="active" aria-pressed="false">Активные</button>
+              <button class="filters__btn" type="button" data-filter="completed" aria-pressed="false">Выполненные</button>
+            </div>
+            <button class="list-toolbar__clear" id="clearCompleted" type="button">Очистить выполненные</button>
+          </div>
+
+          <ul class="task-list" id="taskList"></ul>
+
+          <div class="empty-state" id="emptyState" hidden>
+            <div class="empty-state__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="8.5"></circle>
+                <path d="M8.5 12.5l2.5 2.5 4.5-5"></path>
+              </svg>
+            </div>
+            <p class="empty-state__title" id="emptyTitle">На этот день задач нет</p>
+            <p class="empty-state__text" id="emptyText">Добавьте первую задачу — или выберите другую дату в календаре.</p>
+          </div>
+        </section>
+
+        <aside class="panel calendar" aria-labelledby="calendarTitle">
+          <div class="calendar__head">
+            <h2 class="calendar__title" id="calendarTitle">Ноябрь 2026</h2>
+            <div class="calendar__nav">
+              <button class="calendar__nav-btn" id="prevMonth" type="button" aria-label="Предыдущий месяц">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 18l-6-6 6-6"></path>
+                </svg>
+              </button>
+              <button class="calendar__today" id="todayBtn" type="button">Сегодня</button>
+              <button class="calendar__nav-btn" id="nextMonth" type="button" aria-label="Следующий месяц">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 18l6-6-6-6"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="calendar__weekdays" aria-hidden="true">
+            <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+          </div>
+          <div class="calendar__grid" id="calendarGrid" role="group" aria-label="Календарь задач"></div>
+
+          <div class="calendar__legend">
+            <span class="calendar__legend-item"><span class="calendar__legend-dot"></span> есть задачи</span>
+            <span class="calendar__legend-item"><span class="calendar__legend-ring"></span> сегодня</span>
+          </div>
+        </aside>
+      </div>
+
+      <!-- ===== Экран статистики ===== -->
+      <section class="panel stats" id="statsView" aria-labelledby="statsTitle" hidden>
+        <header class="stats__head">
+          <div>
+            <p class="eyebrow">Аналитика</p>
+            <h2 class="stats__title" id="statsTitle">Статистика</h2>
+          </div>
+          <div class="range-switch" role="group" aria-label="Период статистики">
+            <button class="range-switch__btn is-active" type="button" data-range="week" aria-pressed="true">Неделя</button>
+            <button class="range-switch__btn" type="button" data-range="month" aria-pressed="false">Месяц</button>
+          </div>
+        </header>
+
+        <p class="stats__range" id="statsRange"></p>
+
+        <div class="stats__cards">
+          <article class="stat-card stat-card--accent">
+            <p class="stat-card__label">Выполнено</p>
+            <p class="stat-card__value" id="statPercent">0%</p>
+          </article>
+          <article class="stat-card">
+            <p class="stat-card__label">Всего задач</p>
+            <p class="stat-card__value" id="statTotal">0</p>
+          </article>
+          <article class="stat-card">
+            <p class="stat-card__label">Сделано</p>
+            <p class="stat-card__value" id="statDone">0</p>
+          </article>
+          <article class="stat-card">
+            <p class="stat-card__label">Серия</p>
+            <p class="stat-card__value" id="statStreak">0</p>
+            <p class="stat-card__hint" id="statStreakHint">дней подряд</p>
+          </article>
+        </div>
+
+        <div class="chart" id="chartBlock">
+          <h3 class="chart__title">Выполнение по дням</h3>
+          <div class="chart__scroll">
+            <div class="chart__plot" id="chart" style="--cols: 7"></div>
+          </div>
+        </div>
+
+        <p class="stats__empty" id="statsEmpty" hidden>
+          За этот период задач нет. Выберите день в календаре и добавьте первую задачу.
+        </p>
+      </section>
+
+      <p class="app__note">Данные сохраняются локально в вашем браузере</p>
+    </main>
+  </div>
+
+  <template id="taskTemplate">
+    <li class="task">
+      <button class="task__handle" type="button" aria-label="Перетащить задачу" title="Перетащить">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="4" r="1.2"></circle><circle cx="11" cy="4" r="1.2"></circle>
+          <circle cx="5" cy="8" r="1.2"></circle><circle cx="11" cy="8" r="1.2"></circle>
+          <circle cx="5" cy="12" r="1.2"></circle><circle cx="11" cy="12" r="1.2"></circle>
+        </svg>
+      </button>
+      <label class="task__check">
+        <input class="task__checkbox" type="checkbox">
+        <span class="task__box" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12.5l4.5 4.5L19 7.5"></path>
+          </svg>
+        </span>
       </label>
+      <span class="task__text"></span>
       <button class="task__delete" type="button" aria-label="Удалить задачу" title="Удалить">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 6h18"></path>
           <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"></path>
           <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
